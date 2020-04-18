@@ -55,11 +55,13 @@ class Config:
         settings.beginGroup("source-folder")
         settings.setValue("use", Config.screenshot_source_folder_use)
         settings.setValue("path", Config.screenshot_source_folder_path)
+        settings.setValue("auto-watch", Config.screenshot_source_folder_autowatch)
         settings.endGroup()
 
         settings.beginGroup("source-filelist")
         settings.setValue("use", Config.screenshot_source_filelist_use)
         settings.setValue("path", Config.screenshot_source_filelist_path)
+        settings.setValue("auto-watch", Config.screenshot_source_filelist_autowatch)
         settings.endGroup()
 
 
