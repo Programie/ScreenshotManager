@@ -8,6 +8,7 @@ from typing import List
 
 from PySide2 import QtCore, QtWidgets, QtGui
 from watchdog.observers import Observer
+
 from watchdog.events import FileSystemEventHandler
 
 
@@ -280,6 +281,8 @@ class ScreenshotListItem(QtWidgets.QListWidgetItem):
 
 
 class ScreenshotList(QtWidgets.QListWidget):
+    list_changed = QtCore.Signal()
+
     def __init__(self):
         super().__init__()
 
@@ -292,6 +295,7 @@ class ScreenshotList(QtWidgets.QListWidget):
         self.remove_file(file_path)
         self.addItem(ScreenshotListItem(file_path))
         self.sortItems()
+        self.list_changed.emit()
 
     def remove_file(self, file_path):
         for row in range(self.count()):
@@ -299,6 +303,7 @@ class ScreenshotList(QtWidgets.QListWidget):
             if item.file_path == file_path:
                 self.takeItem(row)
                 self.sortItems()
+                self.list_changed.emit()
                 break
 
 
@@ -508,6 +513,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.screenshot_tabs = {}
 
+        self.screenshots_tab_info_no_config: QtWidgets.QWidget = None
+        self.screenshots_tab_info_no_screenshots: QtWidgets.QWidget = None
+
         self.screenshot_toolbar = self.addToolBar("Screenshot")
         self.screenshot_toolbar.setMovable(False)
         self.screenshot_toolbar.setContextMenuPolicy(QtCore.Qt.PreventContextMenu)
@@ -583,15 +591,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.screenshot_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.screenshot_list.customContextMenuRequested.connect(self.show_screenshot_list_context_menu)
 
-        self.tab_widget.addTab(self.screenshot_list, "Screenshots")
+        self.screenshots_tab_widget = QtWidgets.QStackedWidget()
+        self.screenshots_tab_widget.addWidget(self.screenshot_list)
+        self.add_screenshots_tab_info_widgets()
+
+        self.tab_widget.addTab(self.screenshots_tab_widget, "Screenshots")
         tab_bar.setTabButton(0, QtWidgets.QTabBar.RightSide, None)
 
         self.screenshot_list.itemSelectionChanged.connect(self.update_actions)
         self.screenshot_list.itemDoubleClicked.connect(self.open_screenshot_by_selection)
+        self.screenshot_list.list_changed.connect(self.update_screenshot_tab_widget)
 
         self.screenshot_list_manager = ScreenshotListManager(self.screenshot_list)
 
         self.update_actions()
+        self.update_screenshot_tab_widget()
 
         self.setCentralWidget(self.tab_widget)
         self.resize(800, 500)
@@ -725,6 +739,52 @@ class MainWindow(QtWidgets.QMainWindow):
     def reload(self):
         self.screenshot_list_manager.load_screenshots()
         self.screenshot_list_manager.reload_file_watcher()
+
+        self.update_screenshot_tab_widget()
+
+    def update_screenshot_tab_widget(self):
+        if not Config.screenshot_source_folder_use and not Config.screenshot_source_filelist_use:
+            self.screenshots_tab_widget.setCurrentWidget(self.screenshots_tab_info_no_config)
+        elif not self.screenshot_list.count():
+            self.screenshots_tab_widget.setCurrentWidget(self.screenshots_tab_info_no_screenshots)
+        else:
+            self.screenshots_tab_widget.setCurrentWidget(self.screenshot_list)
+
+    def add_screenshots_tab_info_widgets(self):
+        self.screenshots_tab_info_no_config = QtWidgets.QWidget()
+        self.screenshots_tab_widget.addWidget(self.screenshots_tab_info_no_config)
+
+        layout = QtWidgets.QVBoxLayout()
+        self.screenshots_tab_info_no_config.setLayout(layout)
+
+        layout.addStretch()
+
+        label = QtWidgets.QLabel("No screenshot folder or filelist configured.")
+        layout.addWidget(label)
+
+        open_settings_button = QtWidgets.QPushButton("Open settings")
+        open_settings_button.clicked.connect(self.open_settings)
+        layout.addWidget(open_settings_button)
+
+        layout.addStretch()
+
+        layout.setAlignment(label, QtCore.Qt.AlignHCenter)
+        layout.setAlignment(open_settings_button, QtCore.Qt.AlignHCenter)
+
+        self.screenshots_tab_info_no_screenshots = QtWidgets.QWidget()
+        self.screenshots_tab_widget.addWidget(self.screenshots_tab_info_no_screenshots)
+
+        layout = QtWidgets.QVBoxLayout()
+        self.screenshots_tab_info_no_screenshots.setLayout(layout)
+
+        layout.addStretch()
+
+        label = QtWidgets.QLabel("No screenshots found.")
+        layout.addWidget(label)
+
+        layout.addStretch()
+
+        layout.setAlignment(label, QtCore.Qt.AlignHCenter)
 
     def get_active_screenshot_editor(self):
         screenshot_editor = self.tab_widget.currentWidget()
