@@ -443,6 +443,8 @@ class ScreenshotListManager:
         self.load_screenshots()
 
         self.observer = Observer()
+        self.observer.start()
+
         self.reload_file_watcher()
 
     def load_screenshots(self):
@@ -473,8 +475,6 @@ class ScreenshotListManager:
         if Config.screenshot_source_filelist_use and Config.screenshot_source_filelist_autowatch:
             # Monitor filelist for changes
             self.observer.schedule(WatchdogFileModificationHandler(self.reload_filelist, [Config.screenshot_source_filelist_path]), os.path.dirname(Config.screenshot_source_filelist_path))
-
-        self.observer.start()
 
     def reload_filelist(self):
         new_filelist = set()
