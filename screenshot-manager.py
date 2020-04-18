@@ -636,9 +636,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.edit_toolbar.show()
 
             screenshot_editor.set_drawing_style(self.drawing_style_action_group.checkedAction().data())
+
+            self.setWindowTitle("{} - Screenshot Manager".format(os.path.basename(screenshot_editor.image_path)))
         else:
             self.screenshot_toolbar.show()
             self.edit_toolbar.hide()
+
+            self.setWindowTitle("Screenshot Manager")
 
         self.update_edit_toolbar()
 
