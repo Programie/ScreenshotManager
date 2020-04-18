@@ -23,8 +23,10 @@ class Config:
 
     screenshot_source_folder_use: bool = None
     screenshot_source_folder_path: str = None
+    screenshot_source_folder_autowatch: bool = None
     screenshot_source_filelist_use: bool = None
     screenshot_source_filelist_path: str = None
+    screenshot_source_filelist_autowatch: bool = None
 
     @staticmethod
     def load():
@@ -33,11 +35,13 @@ class Config:
         settings.beginGroup("source-folder")
         Config.screenshot_source_folder_use = Config.to_boolean(str(settings.value("use", defaultValue=False)))
         Config.screenshot_source_folder_path = str(settings.value("path"))
+        Config.screenshot_source_folder_autowatch = Config.to_boolean(str(settings.value("auto-watch", defaultValue=True)))
         settings.endGroup()
 
         settings.beginGroup("source-filelist")
         Config.screenshot_source_filelist_use = Config.to_boolean(str(settings.value("use", defaultValue=False)))
         Config.screenshot_source_filelist_path = str(settings.value("path"))
+        Config.screenshot_source_filelist_autowatch = Config.to_boolean(str(settings.value("auto-watch", defaultValue=True)))
         settings.endGroup()
 
     @staticmethod
@@ -310,11 +314,12 @@ class ScreenshotList(QtWidgets.QListWidget):
     def reload_file_watcher(self):
         self.observer.unschedule_all()
 
-        if Config.screenshot_source_folder_use and os.path.isdir(Config.screenshot_source_folder_path):
+        if Config.screenshot_source_folder_use and Config.screenshot_source_folder_autowatch and os.path.isdir(Config.screenshot_source_folder_path):
             # Monitor filesystem for new files
             self.observer.schedule(WatchdogFilesystemHandler(on_created=self.add_file, on_modified=self.add_file, on_deleted=self.remove_file), Config.screenshot_source_folder_path, True)
 
-        if Config.screenshot_source_filelist_use:
+        if Config.screenshot_source_filelist_use and Config.screenshot_source_filelist_autowatch:
+            # Monitor filelist for changes
             self.observer.schedule(WatchdogFileModificationHandler(self.update_filelist, [Config.screenshot_source_filelist_path]), os.path.dirname(Config.screenshot_source_filelist_path))
 
         self.observer.start()
@@ -363,9 +368,11 @@ class SettingsWindow(QtWidgets.QDialog):
         self.screenshot_source_folder_use: QtWidgets.QCheckBox = None
         self.screenshot_source_folder_path: QtWidgets.QLineEdit = None
         self.screenshot_source_folder_browse: QtWidgets.QPushButton = None
+        self.screenshot_source_folder_autowatch: QtWidgets.QCheckBox = None
         self.screenshot_source_filelist_use: QtWidgets.QCheckBox = None
         self.screenshot_source_filelist_path: QtWidgets.QLineEdit = None
         self.screenshot_source_filelist_browse: QtWidgets.QPushButton = None
+        self.screenshot_source_filelist_autowatch: QtWidgets.QCheckBox = None
 
         self.setWindowTitle("Settings")
         self.setModal(True)
@@ -416,6 +423,10 @@ class SettingsWindow(QtWidgets.QDialog):
         self.screenshot_source_folder_browse.clicked.connect(self.select_screenshot_source_folder)
         layout.addWidget(self.screenshot_source_folder_browse, 0, 2)
 
+        self.screenshot_source_folder_autowatch = QtWidgets.QCheckBox("Watch for changes")
+        self.screenshot_source_folder_autowatch.setChecked(Config.screenshot_source_folder_autowatch)
+        layout.addWidget(self.screenshot_source_folder_autowatch, 0, 3)
+
         self.screenshot_source_filelist_use = QtWidgets.QCheckBox("Filelist")
         self.screenshot_source_filelist_use.setChecked(Config.screenshot_source_filelist_use)
         self.screenshot_source_filelist_use.stateChanged.connect(self.update_screenshot_source_widgets)
@@ -431,16 +442,22 @@ class SettingsWindow(QtWidgets.QDialog):
         self.screenshot_source_filelist_browse.clicked.connect(self.select_screenshot_source_filelist)
         layout.addWidget(self.screenshot_source_filelist_browse, 1, 2)
 
+        self.screenshot_source_filelist_autowatch = QtWidgets.QCheckBox("Watch for changes")
+        self.screenshot_source_filelist_autowatch.setChecked(Config.screenshot_source_filelist_autowatch)
+        layout.addWidget(self.screenshot_source_filelist_autowatch, 1, 3)
+
         self.update_screenshot_source_widgets()
 
     def update_screenshot_source_widgets(self):
         checked = self.screenshot_source_folder_use.isChecked()
         self.screenshot_source_folder_path.setEnabled(checked)
         self.screenshot_source_folder_browse.setEnabled(checked)
+        self.screenshot_source_folder_autowatch.setEnabled(checked)
 
         checked = self.screenshot_source_filelist_use.isChecked()
         self.screenshot_source_filelist_path.setEnabled(checked)
         self.screenshot_source_filelist_browse.setEnabled(checked)
+        self.screenshot_source_filelist_autowatch.setEnabled(checked)
 
     def select_screenshot_source_folder(self):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select folder to use", self.screenshot_source_folder_path.text(), QtWidgets.QFileDialog.DontUseNativeDialog | QtWidgets.QFileDialog.ShowDirsOnly | QtWidgets.QFileDialog.DontResolveSymlinks)
@@ -470,8 +487,10 @@ class SettingsWindow(QtWidgets.QDialog):
 
         Config.screenshot_source_folder_use = self.screenshot_source_folder_use.isChecked()
         Config.screenshot_source_folder_path = screenshot_source_folder_path
+        Config.screenshot_source_folder_autowatch = self.screenshot_source_folder_autowatch.isChecked()
         Config.screenshot_source_filelist_use = self.screenshot_source_filelist_use.isChecked()
         Config.screenshot_source_filelist_path = screenshot_source_filelist_path
+        Config.screenshot_source_filelist_autowatch = self.screenshot_source_filelist_autowatch.isChecked()
         Config.save()
 
         self.accept()
