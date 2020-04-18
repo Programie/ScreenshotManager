@@ -281,71 +281,10 @@ class ScreenshotList(QtWidgets.QListWidget):
     def __init__(self):
         super().__init__()
 
-        self.old_filelist = set()
-
         self.setViewMode(QtWidgets.QListView.ListMode)
         self.setSelectionMode(QtWidgets.QListWidget.ExtendedSelection)
         self.setIconSize(QtCore.QSize(256, 256))
         self.setResizeMode(QtWidgets.QListView.Adjust)
-
-        self.load_screenshots()
-
-        self.observer = Observer()
-        self.reload_file_watcher()
-
-    def load_screenshots(self):
-        self.clear()
-
-        if Config.screenshot_source_folder_use and os.path.isdir(Config.screenshot_source_folder_path):
-            now = time.time()
-
-            for root, directories, files in os.walk(Config.screenshot_source_folder_path):
-                for file in files:
-                    full_path = os.path.join(root, file)
-
-                    if os.path.getmtime(full_path) < now - 86400:
-                        continue
-
-                    self.add_file(full_path)
-
-        if Config.screenshot_source_filelist_use and os.path.isfile(Config.screenshot_source_filelist_path):
-            self.update_from_filelist()
-
-    def reload_file_watcher(self):
-        self.observer.unschedule_all()
-
-        if Config.screenshot_source_folder_use and Config.screenshot_source_folder_autowatch and os.path.isdir(Config.screenshot_source_folder_path):
-            # Monitor filesystem for new files
-            self.observer.schedule(WatchdogFilesystemHandler(on_created=self.add_file, on_modified=self.add_file, on_deleted=self.remove_file), Config.screenshot_source_folder_path, True)
-
-        if Config.screenshot_source_filelist_use and Config.screenshot_source_filelist_autowatch:
-            # Monitor filelist for changes
-            self.observer.schedule(WatchdogFileModificationHandler(self.update_filelist, [Config.screenshot_source_filelist_path]), os.path.dirname(Config.screenshot_source_filelist_path))
-
-        self.observer.start()
-
-    def update_from_filelist(self):
-        new_filelist = set()
-
-        if os.path.isfile(Config.screenshot_source_filelist_path):
-            with open(Config.screenshot_source_filelist_path, "r") as file:
-                for line in file.readlines():
-                    file_path = line.strip()
-                    if not len(file_path) or not os.path.isfile(file_path):
-                        continue
-
-                    new_filelist.add(file_path)
-
-        added_files = new_filelist - self.old_filelist
-        removed_files = self.old_filelist - new_filelist
-
-        self.old_filelist = new_filelist
-
-        for file_path in added_files:
-            self.add_file(file_path)
-
-        for file_path in removed_files:
-            self.remove_file(file_path)
 
     def add_file(self, file_path):
         self.remove_file(file_path)
@@ -496,6 +435,71 @@ class SettingsWindow(QtWidgets.QDialog):
         self.accept()
 
 
+class ScreenshotListManager:
+    def __init__(self, list_widget: ScreenshotList):
+        self.list_widget = list_widget
+        self.old_filelist = set()
+
+        self.load_screenshots()
+
+        self.observer = Observer()
+        self.reload_file_watcher()
+
+    def load_screenshots(self):
+        self.list_widget.clear()
+
+        if Config.screenshot_source_folder_use and os.path.isdir(Config.screenshot_source_folder_path):
+            now = time.time()
+
+            for root, directories, files in os.walk(Config.screenshot_source_folder_path):
+                for file in files:
+                    full_path = os.path.join(root, file)
+
+                    if os.path.getmtime(full_path) < now - 86400:
+                        continue
+
+                    self.list_widget.add_file(full_path)
+
+        if Config.screenshot_source_filelist_use and os.path.isfile(Config.screenshot_source_filelist_path):
+            self.reload_filelist()
+
+    def reload_file_watcher(self):
+        self.observer.unschedule_all()
+
+        if Config.screenshot_source_folder_use and Config.screenshot_source_folder_autowatch and os.path.isdir(Config.screenshot_source_folder_path):
+            # Monitor filesystem for new files
+            self.observer.schedule(WatchdogFilesystemHandler(on_created=self.list_widget.add_file, on_modified=self.list_widget.add_file, on_deleted=self.list_widget.remove_file), Config.screenshot_source_folder_path, True)
+
+        if Config.screenshot_source_filelist_use and Config.screenshot_source_filelist_autowatch:
+            # Monitor filelist for changes
+            self.observer.schedule(WatchdogFileModificationHandler(self.reload_filelist, [Config.screenshot_source_filelist_path]), os.path.dirname(Config.screenshot_source_filelist_path))
+
+        self.observer.start()
+
+    def reload_filelist(self):
+        new_filelist = set()
+
+        if os.path.isfile(Config.screenshot_source_filelist_path):
+            with open(Config.screenshot_source_filelist_path, "r") as file:
+                for line in file.readlines():
+                    file_path = line.strip()
+                    if not len(file_path) or not os.path.isfile(file_path):
+                        continue
+
+                    new_filelist.add(file_path)
+
+        added_files = new_filelist - self.old_filelist
+        removed_files = self.old_filelist - new_filelist
+
+        self.old_filelist = new_filelist
+
+        for file_path in added_files:
+            self.list_widget.add_file(file_path)
+
+        for file_path in removed_files:
+            self.list_widget.remove_file(file_path)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -582,6 +586,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.screenshot_list.itemSelectionChanged.connect(self.update_actions)
         self.screenshot_list.itemDoubleClicked.connect(self.open_screenshot_by_selection)
+
+        self.screenshot_list_manager = ScreenshotListManager(self.screenshot_list)
 
         self.update_actions()
 
@@ -711,8 +717,8 @@ class MainWindow(QtWidgets.QMainWindow):
         settings.accepted.connect(self.reload)
 
     def reload(self):
-        self.screenshot_list.load_screenshots()
-        self.screenshot_list.reload_file_watcher()
+        self.screenshot_list_manager.load_screenshots()
+        self.screenshot_list_manager.reload_file_watcher()
 
     def get_active_screenshot_editor(self):
         screenshot_editor = self.tab_widget.currentWidget()
